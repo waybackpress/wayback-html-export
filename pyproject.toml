@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wayback-html-export"
+version = "1.1.0"
+description = "Export a domain's archived HTML pages from the Wayback Machine as a plain static mirror (standard library only)."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.9"
+authors = [{ name = "Wayback Press", email = "hello@waybackpress.com" }]
+keywords = ["wayback machine", "internet archive", "wayback machine downloader", "archive.org", "static html"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+  "Environment :: Console",
+  "Topic :: Internet :: WWW/HTTP",
+  "Topic :: System :: Archiving",
+]
+
+[project.urls]
+Homepage = "https://waybackpress.com/wayback-machine-downloader/"
+Source = "https://github.com/waybackpress/wayback-html-export"
+Issues = "https://github.com/waybackpress/wayback-html-export/issues"
+
+[project.scripts]
+wayback-html-export = "wayback_export:main"
+
+[tool.setuptools]
+py-modules = ["wayback_export"]

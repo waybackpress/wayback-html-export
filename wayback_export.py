@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -35,7 +36,8 @@ import urllib.request
 
 CDX_ENDPOINT = "https://web.archive.org/cdx/search/cdx"
 WB = "https://web.archive.org/web"
-UA = "wayback-html-export/1.1 (+https://github.com/waybackpress/wayback-html-export)"
+UA = "wayback-html-export/1.1.0 (+https://github.com/waybackpress/wayback-html-export)"
+PAGE_ROWS = 20000          # CDX rows per request
 _DOMAIN_RE = re.compile(r"^[a-z0-9-]+(\.[a-z0-9-]+)+$")
 
 
@@ -59,7 +61,7 @@ def _get(url: str, tries: int = 4) -> bytes:
                 time.sleep(2 * (i + 1))
                 continue
             raise
-        except urllib.error.URLError as e:
+        except (urllib.error.URLError, http.client.IncompleteRead, ConnectionError, TimeoutError) as e:
             last = e
             time.sleep(2 * (i + 1))
     raise last if last else RuntimeError("request failed: " + url)
@@ -70,6 +72,7 @@ def list_snapshots(domain: str, limit: int, timestamp: str | None) -> list[dict]
 
     The CDX index returns captures oldest-first, so we read every 200/HTML row and keep
     the newest one per URL (at/before --timestamp when given), then apply --limit.
+    Rows are read in pages (CDX resume key) so a large domain never needs one huge response.
     """
     params = {
         "url": f"{domain}/*",
@@ -77,18 +80,33 @@ def list_snapshots(domain: str, limit: int, timestamp: str | None) -> list[dict]
         "fl": "timestamp,original,mimetype,statuscode,urlkey",
         "filter": ["statuscode:200", "mimetype:text/html"],
         "collapse": "digest",   # drop identical consecutive captures
+        "limit": str(PAGE_ROWS),
+        "showResumeKey": "true",
     }
     if timestamp:
         params["to"] = timestamp   # only captures at/before this date
-    raw = _get(CDX_ENDPOINT + "?" + urllib.parse.urlencode(params, doseq=True))
-    rows = json.loads(raw.decode("utf-8", "replace") or "[]")
-    if not isinstance(rows, list) or len(rows) <= 1:
-        return []
     latest: dict[str, dict] = {}
-    for ts, original, mimetype, _code, urlkey in rows[1:]:
-        cur = latest.get(urlkey)
-        if cur is None or ts > cur["timestamp"]:
-            latest[urlkey] = {"timestamp": ts, "original": original, "mimetype": mimetype}
+    resume = None
+    while True:
+        q = dict(params, resumeKey=resume) if resume else params
+        raw = _get(CDX_ENDPOINT + "?" + urllib.parse.urlencode(q, doseq=True))
+        rows = json.loads(raw.decode("utf-8", "replace") or "[]")
+        if not isinstance(rows, list) or len(rows) <= 1:
+            break
+        resume = None
+        if len(rows) >= 3 and rows[-2] == [] and len(rows[-1]) == 1:   # [..., [], [resumeKey]]
+            resume = rows[-1][0]
+            rows = rows[:-2]
+        for row in rows[1:]:
+            if len(row) != 5:
+                continue
+            ts, original, mimetype, _code, urlkey = row
+            cur = latest.get(urlkey)
+            if cur is None or ts > cur["timestamp"]:
+                latest[urlkey] = {"timestamp": ts, "original": original, "mimetype": mimetype}
+        if not resume:
+            break
+        print(f"  ...{len(latest)} URLs listed so far", file=sys.stderr)
     snaps = sorted(latest.values(), key=lambda r: r["original"])
     return snaps[:limit] if limit else snaps
 

@@ -19,7 +19,15 @@ you exactly that: a faithful export of the captured pages, as files on disk.
 
 ## Requirements
 
-- Python 3.9+ (standard library only — no `pip install`)
+- Python 3.9+ (standard library only, no dependencies)
+
+## Install
+
+```bash
+pip install wayback-html-export      # then run: wayback-html-export example.com
+```
+
+Or skip installing: download `wayback_export.py` and run it with `python3` as below.
 
 ## Usage
 
